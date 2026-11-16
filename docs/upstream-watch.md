@@ -417,3 +417,143 @@ The findings below come from the pages it could read. The Go toolchain could not
   - #58 log
 - This entry is stacked on #58 for the same reason as before: each log PR appends to this file.
 - **Timing:** #54's toolchain bump will be superseded by go1.27.4. Merging #54 now still closes CVE-2026-111943.
+
+## 2026-11-16
+
+Window: 2026-10-30 to 2026-11-16. This includes a backfill of the pages the 2026-11-09 run could not read.
+
+**Access this run.** The canonical URLs for several pages were blocked, so the run read OpenAI's own `.md`/`index.html` copies of the same docs instead, and the `.md` copies of the Claude docs. For the Azure retirement schedule it read a regional (en-za) copy of the same page.
+
+Still **not reviewed**:
+- the Gemini deprecations page
+- AWS What's New for November
+- the Codex and Agents SDK GitHub releases, read from release trackers instead
+
+The Go toolchain is still blocked: proxy.golang.org gets a policy 403. Code was tested partly with the local Go 1.24 and partly by CI (see #64).
+
+### Anthropic
+
+- **Claude Fable 5.2 and Mythos 5.2** (`claude-fable-5-2`, `claude-mythos-5-2`, 2026-11-09; Mythos is limited to verified organizations). [Release notes](https://platform.claude.com/docs/en/release-notes/overview)
+  - 1M context, 128k output and always-on adaptive thinking, at $8/$40 per MTok.
+  - Fast mode on Fable 5.2 is `speed: "fast"` with no beta header, at 2×.
+  - **(a)** The catalog prices every platform ID: `claude-fable-5-2` (with `provider_specific_entry` `fast: 2`, `us: 1.1`), `vertex_ai/…`, Bedrock `global.`/`us.`/`eu.`/`us-gov.` profiles, and `azure_ai/…` plus `azure_ai/…-fast`. The Vertex entries carry `deprecation_date` 2027-11-09.
+  - **Migration 400s.** The gateway passes these through on `/v1/messages`:
+    - The thinking-block **prefix check is now enforced for all accounts**. Resending a thinking block after editing `system`, `tools` or earlier messages returns 400.
+    - `computer_20251124` returns 400 except on Bedrock (use `computer_toolset_20260801`).
+    - A 5.2 executor accepts only a 5.2 advisor.
+  - **Watch:** the Responses→Messages bridge replays reasoning as thinking blocks. If Codex's opt-in incremental tools change `tools` mid-conversation, a bridged request to a 5.2 model would get the prefix-check 400.
+- **Message threads beta** (`message-threads-2026-08-12`, 2026-11-02). The server keeps the conversation, so a request sends only new messages. Threads expire 5 minutes after the last request.
+  - **(a)** It passes through on `/v1/messages`.
+  - **(b), follow-up:** the response cache keys on the request body and the `anthropic-beta` value. Two identical "new message" requests to the same thread at different points in the conversation would therefore share a key, and with a scope's `cache_ttl_seconds` set the second would get a stale reply. The same applies to OpenAI `previous_response_id` and `conversation` on the relay if it is cached.
+  - The fix is to skip the response cache when `anthropic-beta` includes `message-threads-*`, or when the body has `previous_response_id`/`conversation`.
+  - Guardrails and Secret Shield likewise see only the new messages, which is by design.
+  - Not done this run: the exact thread request field is not documented on a page the run could read, and the gateway package could not be built locally.
+- **Text watermarking** (2026-11-03) now applies to Mythos 5, Opus 4.7 and Sonnet 4.6. On Sonnet 4.6 the watermark may be missing when sampling parameters are non-default. This confirms the 2026-11-01 rumour. **(d)** No API change.
+- Usage and Cost Analytics API beta (10-29). Compliance `security_posture`, console IP allowlisting and Admin "sign out everywhere" betas (11-05). Self-hosted Managed Agents (11-12). **(d)**
+- **Deprecations:** no new notices. The newest entry is still 2026-09-30.
+  - **`claude-sonnet-4-5-20250929` retires on 2026-11-30.** The catalog's `deprecation_date` is 2026-11-30.
+  - **Opus 4.8 fast mode is removed on 2026-11-30.**
+  - `claude-opus-4-5-20251101` is "not sooner than" 2026-11-24, with no notice.
+  - `claude-haiku-4-5-20251001` is Active with no notice.
+  - The beta-headers table is unchanged since `agent-memory-2026-07-22`.
+
+### AWS Bedrock
+
+- **Fable 5.2 and Mythos 5.2 on `bedrock-runtime`** (2026-11-09) are available through US, GovCloud and Global cross-region inference only. **(a)** Discovery already skips foundation models without `ON_DEMAND` (2026-10-12), and the catalog prices the profiles. [Document history](https://docs.aws.amazon.com/bedrock/latest/userguide/doc-history.html)
+- Sonnet 5.5 compaction corrections and mid-conversation tool changes (11-09). **(a)** Passed through in the body.
+- Watermarking topic (10-30) and Kimi K3.1 Pro Highspeed (11-04). **(d)**
+- Mantle is unchanged and still waiting on a decision.
+
+### Google Vertex AI / Gemini
+
+- **Agent Platform: `claude-fable-5-2` GA in Model Garden, and fast mode for Claude GA on Vertex** via `speed: "fast"` on online pay-as-you-go requests (2026-11-09). [Release notes](https://docs.cloud.google.com/gemini-enterprise-agent-platform/release-notes)
+  - **(b), follow-up for #53:** the catalog's `vertex_ai/claude-*` entries carry no fast multiplier. #53 would therefore price Vertex fast mode at standard rates, half the real cost.
+  - #53 already falls back to Anthropic's multiplier for Foundry. Extending that fallback to Vertex is a one-line change, but it belongs in #53.
+- `gemini-4-hydrogen` GA with OpenAI-compatible Chat Completions (11-12). `gemini-4-carbon` (11-10) and `gemini-omni-1.2-flash` (11-05) GA. **(a)**
+- Meta Muse partner models in Preview are served only through the OpenAI-compatible **Responses** API on Vertex. **(d)** The Vertex OpenAI-compatible provider targets Chat Completions. Revisit if they go GA.
+- `safety_identifier` labels GA (11-11). Inference request metadata logging GA (10-30, logged 11-02). **(d)**
+- Gemini API: the `gemini-api` CLI beta (10-27) and the Computer Use tool GA (10-30). **(d)** No new models, deprecations or OpenAI-compatibility changes. [Changelog](https://ai.google.dev/gemini-api/docs/changelog)
+
+### Azure
+
+- **Retirement schedule** (last updated 2026-09-23) is unchanged.
+  - `claude-haiku-4-5` retired on **2026-11-15**.
+  - `claude-opus-4-5` retires on 2026-11-24 and `claude-sonnet-4-5` on 2026-11-30.
+  - Azure OpenAI `o1`, `o1-pro`, `o3`, `o3-deep-research`, `o3-pro`, `o3-mini` and `o4-mini` retire on **2026-11-19**.
+  - `gpt-4o` 2024-05-13 retires on 2026-12-09.
+  - `gpt-chat-latest` previews retire on 2026-11-17 and 2026-12-08.
+  - [Schedule](https://learn.microsoft.com/en-za/azure/foundry/openai/concepts/model-retirement-schedule)
+  - **Discrepancy:** the catalog now gives `azure_ai/claude-haiku-4-5` a `deprecation_date` of **2027-03-16**, where it was 2026-11-15. The model watcher will stop flagging it, while Microsoft's page still says 2026-11-15. Check the Foundry portal before relying on either date.
+- **Claude in Foundry:** Microsoft lists Fable 5.2, its `-fast` deployment and Mythos 5.2 as Preview, **Entra ID only**. **(a)** The Foundry provider supports Entra auth. Anthropic's Foundry page lists them as Anthropic-hosted.
+- No new Azure OpenAI api-version. GA is `/openai/v1/`. **(d)**
+
+### OpenAI
+
+- **Cache-write billing (deferred from 2026-11-09): (b) Done, draft #64.** The confirmed fields are `input_tokens_details.cache_write_tokens` and `cache_write_tokens_details.ttl_30m_tokens`/`ttl_12h_tokens`.
+  - The catalog keys are `cache_creation_input_token_cost` (30m, 1.25×) and `cache_creation_input_token_cost_above_12hr` (12h, 2.5×), with `_above_272k_tokens` tiers.
+  - The guide documents no Chat Completions cache-write field. #64 reads `prompt_tokens_details.cache_write_tokens` if it appears.
+- **Deprecation (11-10):** `gpt-image-2` and `gpt-image-2-2026-04-21` shut down on 2027-02-10. **(a)** [Deprecations](https://developers.openai.com/api/docs/deprecations)
+- `gpt-6-cyber` (11-05) and the `gpt-image-2.6-*` models (11-04) were logged on 11-09. There are no new Responses streaming events, item types or usage fields after 11-05.
+- **Codex** 0.166.0–0.169.0 (10-29 to 11-13), per release trackers:
+  - Incremental tools for regular Responses are **opt-in** (#59832).
+  - Legacy incremental tools are restricted to Bedrock providers (#60040).
+  - Incremental tool declarations on GCP (#60617).
+  - Responses WebSocket messages are fragmented into bounded frames (#60522).
+  - "Deferred tool world state" is on by default (0.167).
+  - **Watch continues:** none of this is default for Responses clients yet. If it becomes the default, the bridge must fold tool-catalog updates into `tools`; see also the prefix-check note above.
+- Agents SDK: no stable release after v0.24.0, only alphas. **(d)**
+
+### Competitors
+
+- **LiteLLM**
+  - v1.110.0rc1 (11-14):
+    - Responses streams name every SSE event and drop `[DONE]`.
+    - Tighter **response-ID ownership checks**.
+    - TPM/RPM limits on tags.
+    - A `total_timeout` across retries.
+  - Releases are cosign-signed from v1.111.0-dev.3. A private registry for embargoed fixes launched 11-12.
+  - **Still no statement on the integrity of `model_prices_and_context_window.json`.** The 2026-10-26 decision (pin `THEOPHYLAX_PRICING_URL` or sanity-check refreshes) is open.
+  - LiteLLM is now also enforcing `previous_response_id` ownership, which adds weight to the 2026-10-19 decision item.
+- **Bifrost**
+  - v2.5.0 (11-06):
+    - 12-hour OpenAI cache-write pricing (matched by #64).
+    - Codex-on-Responses fixes.
+    - Caller email and optional client IP in logs.
+    - MCP per-user OAuth.
+    - **Anthropic workload identity federation.**
+    - Routing falls back on 4xx.
+  - v2.5.1 (11-10): crash fixes.
+  - Workload identity for Anthropic is worth a roadmap look next to #56 (Google auth for `anthropic://`).
+- **Portkey:** nothing dated November.
+
+### Security
+
+- **Go 1.27.4 / 1.26.11** (2026-11-10): 12 CVEs. [Announcement](https://groups.google.com/g/golang-announce/c/iY8TY0wWgbM/m/KsU1KfWgAQAJ)
+  - **CVE-2026-97054 (net/http)** is a server crash when a handler reads past its `MaxBytesReader` limit while writing the response header. The gateway uses `MaxBytesReader`.
+  - The other 11 are cmd/go, cgo and linker fixes for building untrusted cgo packages.
+  - **(b) Done:** #54 now moves the toolchain to go1.27.4, superseding go1.27.3.
+- **pgx** (fixed in v5.12.0, published 2026-10-31):
+  - **GHSA-j38q-h3ph-jjpq:** SQL injection in simple-protocol `SendBatch` when a query ends in a `--` comment. The gateway's logger uses `SendBatch`, but in the default extended protocol, and no `default_query_exec_mode=simple_protocol` is set in code. It applies only if an operator sets that in `THEOPHYLAX_DATABASE_URL`.
+  - **GHSA-95fj-3fxw-g62g:** `require_auth`/`channel_binding=require` are skipped. It applies only if the operator sets them.
+  - v5.13.0 (11-11) reportedly fixes GHSA-w9rp-vfrh-q8vv, a panic on a short DataRow from a hostile server or MITM without TLS. This is unverified; only a secondary source was found.
+  - **Dependabot #63 (pgx 5.13.0) should be merged.**
+- **x/text v0.44.0:** Punycode and `ParseAcceptLanguage` hardening, with no advisory. Dependabot #62. **(a)**
+- **vite GHSA-p4f5-76q4-ffq7 (critical, 11-10):** RCE through a network-exposed **dev server**.
+  - Affected: 4.0–6.4.5 (vite 5.4 on `main` has no 5.x fix) and 8.3.0–8.3.6. Fixed in 8.3.7.
+  - **#57 (vite 8.3.5) is still affected.** Bump it to ≥8.3.7.
+  - Production builds (`vite build`) are not affected. Only developers running `npm run dev` with `--host` are.
+  - Details are from secondary sources; GitHub's advisory page could not be opened.
+- GHSA-587h-7wmj-h5pm (vite launch-editor, Windows only) affects 5.4 and is fixed in 8.3.3. GHSA-8g5g-mxqh-grgj affects only 6.4.4. **(d)** for builds.
+- React, @vitejs/plugin-react, TypeScript, esbuild: no new advisories.
+
+### Backlog
+
+These upstream-watch PRs are still open:
+- #53 fast-mode billing (needs the Vertex fallback above)
+- #54 Go 1.27.4 (updated this run)
+- #55 judge temperature retry
+- #56 Claude on Google Cloud (draft)
+- #58 log
+- #64 OpenAI cache writes (draft until CI passes)
+
+This entry is stacked on #58 again.
