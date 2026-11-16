@@ -303,7 +303,7 @@ func (g *Gateway) relayStream(w http.ResponseWriter, resp *http.Response, st *re
 			out = restoreResponsesEvent(st.restorer, ev)
 		}
 		if strings.Contains(ev.Event, "completed") || bytes.Contains(ev.Data, []byte(`"usage"`)) {
-			if u := parseAnyUsage(ev.Data); u.Input+u.Output > 0 {
+			if u := parseAnyUsage(ev.Data); u.Total() > 0 {
 				usage = u
 			}
 		}
@@ -387,10 +387,7 @@ func parseAnyUsage(b []byte) providers.Usage {
 	out := providers.Usage{Input: n("input_tokens") + n("prompt_tokens"), Output: n("output_tokens") + n("completion_tokens")}
 	for _, k := range []string{"input_tokens_details", "prompt_tokens_details"} {
 		if d, ok := u[k].(map[string]any); ok {
-			if c, ok := d["cached_tokens"].(float64); ok {
-				out.CacheRead = int(c)
-				out.Input -= int(c)
-			}
+			out.AddOpenAICacheDetails(d)
 		}
 	}
 	return out
