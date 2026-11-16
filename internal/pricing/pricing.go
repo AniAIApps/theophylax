@@ -35,6 +35,8 @@ import (
 const DefaultURL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 // Rates are USD per token. Nil means the catalog does not list that rate.
+// CacheWrite1h is the extended-TTL cache-write rate: Anthropic's 1-hour TTL,
+// or OpenAI's 12-hour TTL for entries without a 1-hour rate.
 type Rates struct {
 	Input        *float64 `json:"input,omitempty"`
 	Output       *float64 `json:"output,omitempty"`
@@ -256,7 +258,7 @@ func (c *Catalog) Status() Status {
 // ---------------------------------------------------------------------------
 // Parsing
 
-var tierRe = regexp.MustCompile(`^(input_cost_per_token|output_cost_per_token|cache_read_input_token_cost|cache_creation_input_token_cost|cache_creation_input_token_cost_above_1hr)_above_(\d+)k_tokens$`)
+var tierRe = regexp.MustCompile(`^(input_cost_per_token|output_cost_per_token|cache_read_input_token_cost|cache_creation_input_token_cost|cache_creation_input_token_cost_above_1hr|cache_creation_input_token_cost_above_12hr)_above_(\d+)k_tokens$`)
 
 // Parse reads a LiteLLM-format catalog, keeping entries priced per token.
 func Parse(raw []byte) (map[string]*Price, error) {
@@ -285,10 +287,18 @@ func Parse(raw []byte) (map[string]*Price, error) {
 				p.Capabilities = append(p.Capabilities, c[0])
 			}
 		}
-		tiers := map[int]*Rates{}
+		// OpenAI's 12-hour cache-write rate fills the extended-TTL write rate
+		// (CacheWrite1h) unless the entry also lists a 1-hour rate, which
+		// wins. They are collected separately so map order cannot decide.
+		tiers, tiers12h := map[int]*Rates{}, map[int]*float64{}
+		var base12h *float64
 		for f, val := range fields {
 			n, ok := val.(float64)
 			if !ok {
+				continue
+			}
+			if f == write12h {
+				base12h = &n
 				continue
 			}
 			if r := ratePtr(&p.Rates, f); r != nil {
@@ -300,7 +310,19 @@ func Parse(raw []byte) (map[string]*Price, error) {
 				if tiers[k] == nil {
 					tiers[k] = &Rates{}
 				}
+				if m[1] == write12h {
+					tiers12h[k] = &n
+					continue
+				}
 				*ratePtr(tiers[k], m[1]) = &n
+			}
+		}
+		if p.Rates.CacheWrite1h == nil {
+			p.Rates.CacheWrite1h = base12h
+		}
+		for k, n := range tiers12h {
+			if tiers[k].CacheWrite1h == nil {
+				tiers[k].CacheWrite1h = n
 			}
 		}
 		if p.Rates.Input == nil && p.Rates.Output == nil {
@@ -314,6 +336,9 @@ func Parse(raw []byte) (map[string]*Price, error) {
 	}
 	return out, nil
 }
+
+// write12h is OpenAI's 12-hour-TTL cache-write rate (GPT-5.6 and later).
+const write12h = "cache_creation_input_token_cost_above_12hr"
 
 func ratePtr(r *Rates, field string) **float64 {
 	switch field {

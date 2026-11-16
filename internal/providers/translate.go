@@ -58,11 +58,30 @@ func OpenAIUsage(u map[string]any) Usage {
 	if u == nil {
 		return Usage{}
 	}
-	cached := 0
+	out := Usage{Input: num(u["prompt_tokens"]), Output: num(u["completion_tokens"])}
 	if d, ok := u["prompt_tokens_details"].(map[string]any); ok {
-		cached = num(d["cached_tokens"])
+		out.AddOpenAICacheDetails(d)
 	}
-	return Usage{Input: num(u["prompt_tokens"]) - cached, Output: num(u["completion_tokens"]), CacheRead: cached}
+	return out
+}
+
+// AddOpenAICacheDetails moves the cache reads and writes in an OpenAI
+// input_tokens_details / prompt_tokens_details object out of Input, where
+// OpenAI counts them, into CacheRead and CacheWrite.
+//
+// OpenAI bills cache writes (GPT-5.6 and later) at 1.25x input for the default
+// 30-minute TTL and 2.5x for the 12-hour TTL, and reports them as
+// cache_write_tokens, split by TTL in cache_write_tokens_details. 12-hour
+// writes are recorded in CacheWrite1h, the extended-TTL share of CacheWrite,
+// which the price catalog's cache_creation_input_token_cost_above_12hr rate
+// prices.
+func (u *Usage) AddOpenAICacheDetails(d map[string]any) {
+	read, write := num(d["cached_tokens"]), num(d["cache_write_tokens"])
+	long := min(num(asMap(d["cache_write_tokens_details"])["ttl_12h_tokens"]), write)
+	u.CacheRead += read
+	u.CacheWrite += write
+	u.CacheWrite1h += long
+	u.Input = max(u.Input-read-write, 0)
 }
 
 // ---------------------------------------------------------------------------
