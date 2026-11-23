@@ -270,7 +270,8 @@ func (c *Conn) Redacted() string {
 }
 
 // HTTPClient builds a tuned client honouring per-connection proxy and CA settings
-// (useful behind TLS-inspecting egress such as Zscaler).
+// (useful behind a TLS-inspecting corporate proxy such as Zscaler, Netskope
+// or Palo Alto: point ca_bundle at the proxy's root certificate).
 func (c *Conn) HTTPClient(timeout time.Duration) (*http.Client, error) {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
