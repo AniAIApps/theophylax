@@ -590,6 +590,9 @@ func (g *Gateway) unaryResponse(w http.ResponseWriter, r *http.Request, resp *ht
 		code := writeErr(w, cf, util.Err(502, "api_error", "translating upstream response: "+err.Error()))
 		return usage, code, err.Error()
 	}
+	if pf == cf && requested != "" && served.Model != "" {
+		out = withModel(out, requested) // passthrough: report the model the client asked for
+	}
 	if hasOutputRules(policies) {
 		var m map[string]any
 		dec := json.NewDecoder(bytes.NewReader(out))
@@ -769,6 +772,9 @@ func (g *Gateway) streamResponse(w http.ResponseWriter, r *http.Request, resp *h
 			case "error":
 				errMsg, status = "upstream stream error: "+truncate(string(ev.Data), 300), 502
 			}
+			if ev.Event == "message_start" && a2o == nil && requested != "" {
+				ev.Data = withMessageModel(ev.Data, requested) // passthrough: report the requested model
+			}
 			native := []providers.SSEEvent{*ev}
 			if sr != nil {
 				native = sr.anthropic(ev)
@@ -825,6 +831,9 @@ func (g *Gateway) streamResponse(w http.ResponseWriter, r *http.Request, resp *h
 				if string(ev.Data) == "[DONE]" {
 					outEvents = nil // re-emitted at the end
 				} else {
+					if requested != "" && len(ev.Data) > 0 && ev.Data[0] == '{' && bytes.Contains(ev.Data, []byte(`"model"`)) {
+						ev.Data = withModel(ev.Data, requested) // passthrough: report the requested model
+					}
 					outEvents = []providers.SSEEvent{*ev}
 				}
 			}
