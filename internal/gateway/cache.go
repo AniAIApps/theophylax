@@ -52,6 +52,20 @@ func cacheTTL(snap *Snapshot, p *auth.Principal) time.Duration {
 	return 0
 }
 
+// statefulRequest reports whether the provider keeps conversation state for
+// this request, so an identical body does not mean an identical answer and a
+// replayed response would be wrong. Anthropic message threads (beta
+// message-threads-2026-08-12) send only the new messages with a "thread"
+// parameter; each response id can be continued once, so a cached reply would
+// hand two conversations the same id, and a cached continue reply would
+// answer from a thread state that no longer exists.
+func statefulRequest(body map[string]any, hdr http.Header) bool {
+	if _, ok := body["thread"]; ok {
+		return true
+	}
+	return hasBetaPrefix(hdr, "message-threads-")
+}
+
 // cacheKey identifies an upstream request exactly: tenancy (so entries are
 // never shared across organizations or projects), the deployment, the
 // upstream model, streaming, the request body as sent upstream (after

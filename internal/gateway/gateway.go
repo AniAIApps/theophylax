@@ -423,7 +423,7 @@ func (g *Gateway) inference(w http.ResponseWriter, r *http.Request, cf providers
 	// Response cache: off unless the scope sets cache_ttl_seconds; the client
 	// can opt out per request.
 	cacheFor, cacheMode := time.Duration(0), strings.ToLower(r.Header.Get(CacheHeader))
-	if g.Cache != nil && cacheMode != "off" {
+	if g.Cache != nil && cacheMode != "off" && !statefulRequest(body, clientHdr) {
 		cacheFor = cacheTTL(snap, p)
 	}
 	var capture *captureBody

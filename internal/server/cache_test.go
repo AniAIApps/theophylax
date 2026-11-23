@@ -259,3 +259,63 @@ func TestResponseCacheSecretShield(t *testing.T) {
 		t.Fatalf("cache hit consumed budget: %d -> %d tokens", before, after)
 	}
 }
+
+// TestResponseCacheSkipsMessageThreads checks that requests whose state lives
+// at the provider (Anthropic message threads) are never cached, while the same
+// request without a thread still is.
+func TestResponseCacheSkipsMessageThreads(t *testing.T) {
+	ts, s := setup(t)
+	root := newClient(t, ts.URL)
+	root.must("POST", "/api/auth/login", map[string]string{"email": "root@example.com", "password": "root-password-123"}, 200)
+	org := root.list("/api/orgs")[0]["id"].(string)
+	team := root.must("POST", "/api/orgs/"+org+"/teams", map[string]any{"name": "T"}, 201)["id"].(string)
+	proj := root.must("POST", "/api/teams/"+team+"/projects", map[string]any{"name": "P"}, 201)["id"].(string)
+	prov := root.must("POST", "/api/providers", map[string]any{"name": "mock", "connection_string": "mock://x"}, 201)["id"].(string)
+	m := root.must("POST", "/api/models", map[string]any{"name": "m"}, 201)["id"].(string)
+	root.must("POST", "/api/models/"+m+"/deployments", map[string]any{"provider_id": prov, "upstream_model": "mock-echo"}, 201)
+	key := root.must("POST", "/api/keys", map[string]any{"name": "k", "project_id": proj}, 201)["secret"].(string)
+	root.must("PATCH", "/api/orgs/"+org, map[string]any{"settings": map[string]any{"cache_ttl_seconds": 600}}, 200)
+	waitReload(s)
+
+	cacheHdr := func(body map[string]any, extra ...string) string {
+		code, _, raw, hdr := gw(t, ts.URL, key, "/v1/messages", body, extra...)
+		if code != 200 {
+			t.Fatalf("%d %s", code, raw)
+		}
+		return hdr.Get("X-Theophylax-Cache")
+	}
+	waitStored := func() {
+		for i := 0; i < 100; i++ {
+			var c int
+			_ = s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM response_cache`).Scan(&c)
+			if c > 0 {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatal("plain request was never cached")
+	}
+
+	create := msg("m", "start a thread")
+	create["thread"] = map[string]any{"type": "create"}
+	cont := msg("m", "and then?")
+	cont["thread"] = map[string]any{"type": "continue", "previous_message_id": "msg_123"}
+	for i := 0; i < 2; i++ {
+		for name, h := range map[string]string{
+			"create":            cacheHdr(create, "anthropic-beta", "message-threads-2026-08-12"),
+			"continue":          cacheHdr(cont, "anthropic-beta", "message-threads-2026-08-12"),
+			"beta header alone": cacheHdr(msg("m", "beta only"), "anthropic-beta", "message-threads-2026-08-12"),
+		} {
+			if h != "" {
+				t.Fatalf("%s (call %d): X-Theophylax-Cache %q, want no caching", name, i+1, h)
+			}
+		}
+	}
+	if h := cacheHdr(msg("m", "no thread")); h != "miss" {
+		t.Fatalf("plain request: %q, want miss", h)
+	}
+	waitStored()
+	if h := cacheHdr(msg("m", "no thread")); h != "hit" {
+		t.Fatalf("plain request: %q, want hit", h)
+	}
+}
