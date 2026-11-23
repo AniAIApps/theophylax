@@ -557,3 +557,94 @@ These upstream-watch PRs are still open:
 - #64 OpenAI cache writes (draft until CI passes)
 
 This entry is stacked on #58 again.
+
+## 2026-11-23
+
+Window: 2026-11-16 to 2026-11-23, plus primary-source confirmation of items the 2026-11-16 run could only read second-hand.
+
+**Access this run.** All primary pages listed below were readable. The Go toolchain is still blocked (proxy.golang.org returns a policy 403), so code was tested locally on Go 1.25.1 with `-race` and Postgres 16, and CI runs the `go.mod` toolchain. The competitors' GitHub release pages served stale snapshots (LiteLLM stops at 10-29, Portkey at early 2026), so competitor coverage this week is **not reliable**.
+
+### Anthropic
+
+- **Message threads: (b) Done, #66.** The docs page is now readable and confirms the request field: `"thread": {"type": "create"}` or `{"type": "continue", "previous_message_id": "<id>"}`. Each response `id` can be continued once, and a missing thread returns 404 `thread_not_found`. #66 skips the response cache for any request with `thread` or a `message-threads-*` beta header. [Docs](https://platform.claude.com/docs/en/build-with-claude/message-threads)
+  - **Needs a decision:** continue requests must omit `system` and `tools`, and send either one (even `null`) → 400. Managed-agent overlays always inject both, so **threads cannot be continued through an agent key**. Skipping the overlay on continue would let a caller continue a thread the agent didn't create. Left failing closed.
+  - Also on the page: changing `model`, `tool_choice`, `thinking`, `mcp_servers`, `context_management`, `output_config` or `cache_control` between create and continue → 400 `thread_fingerprint_mismatch`. Failover to a different deployment mid-thread would hit the provider's 404, which is expected. **(a)**
+- **Linked billing beta** (`user-profiles-billing-2026-10-01`, 2026-11-17): a request-level `billing_policy` on `/v1/messages` and `/v1/chat/completions` chooses whether the app or the customer's linked Claude organization pays. **(d)** for now. It passes through unchanged. If enterprises use it, the gateway's cost accounting would over-report spend that the linked org paid. **Watch.** [Release notes](https://platform.claude.com/docs/en/release-notes/overview)
+- Watermarking extended to Opus 4.6/4.5, Sonnet 4.5 and Haiku 4.5, and `external_key.failed`/`recovered` webhooks (11-16). Self-hosted Managed Agents (11-12). **(d)**
+- **Deprecations:** no new notices (newest is still 2026-09-30).
+  - **`claude-sonnet-4-5-20250929` retires 2026-11-30.**
+  - **Opus 4.8 `speed: "fast"` errors from 2026-11-30.**
+  - `claude-opus-4-5-20251101` is "not sooner than 2026-11-24" and `claude-haiku-4-5-20251001` is "not sooner than 2026-10-15", both still Active with no notice. [Deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations)
+
+### AWS Bedrock
+
+- Watermarking topic adds Opus 4.7 and Mythos 5 (11-19). Private-offer distribution from AWS Marketplace (11-16). **(d)** [Document history](https://docs.aws.amazon.com/bedrock/latest/userguide/doc-history.html)
+- Mythos 5.2 in GovCloud (11-09) is allow-listed only. **(a)** It was logged last week.
+- No Claude ID, profile, InvokeModel or auth changes. Mantle is unchanged and still waiting on a decision.
+
+### Google Vertex AI / Gemini
+
+- **Gemini 4 Hydrogen** (`gemini-4-hydrogen`, 11-12) and **Gemini 4 Neon** (`gemini-4-neon`, 11-18) are GA, including on the OpenAI-compatible Chat Completions API. **(a)** Discovery and catalog.
+  - Both reject `thinking_budget` and `thinking_level="MINIMAL"` with 400. Clients sending `reasoning_effort: "minimal"` through the OpenAI-compatible provider may hit this. That is passed through, not translated. **Watch.**
+  - Implicit caching is on by default. Cache-write billing starts 2027-01-12, so check the catalog then.
+  - [Release notes](https://docs.cloud.google.com/gemini-enterprise-agent-platform/release-notes)
+- Deferred tier GA on the Interactions API (`service_tier="deferred"`, 11-17), voice remixing, CodeMender and Agent Gateway. **(d)**
+- Gemini API changelog has no entries since 10-30. `gemini-4-argon` intro pricing ends 2026-11-30 ($2/$10 → $4/$20). **(a)** Catalog. [Changelog](https://ai.google.dev/gemini-api/docs/changelog)
+- No Claude-on-Vertex changes in the window.
+
+### Azure
+
+- **Retirement schedule updated 2026-11-18.** [Schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule)
+  - `claude-haiku-4-5` and `claude-opus-4-5` (v1) moved to **2027-02-22**. This resolves last week's discrepancy: the catalog's later date was right in spirit.
+  - `claude-sonnet-4-5` v1 still retires **2026-11-30**.
+  - `gpt-4o` 2024-05-13 moved to **2027-01-14**, with auto-upgrade to `gpt-5.1` for Global/Data Zone Standard.
+  - **o1, o1-pro, o3, o3-deep-research, o3-pro, o3-mini and o4-mini retired on 2026-11-19.** Deployments still routing to them now fail. Replacements are `gpt-5.6-sol`/`gpt-5.6-terra` where available. `codex-mini` retired 11-17.
+  - **(a)** The model watcher flags these. Operators must repoint.
+- No new Azure OpenAI api-version. **(d)**
+
+### OpenAI
+
+- **GPT-6.2 Astra / Sol** (`gpt-6.2-astra`, `gpt-6.2-sol`, 11-17) on Responses and Chat Completions. Tool calling requires Responses. **(a)** Catalog.
+  - The changelog says GPT-6.2 "changes how Responses preserves reasoning when a conversation prefix is edited, and how it handles the top-level `instructions` field". The relay passes these through. The Responses→Messages bridge only targets Claude. **Watch** whether Codex changes how it sends `instructions` for 6.2.
+- Background completion windows (2h/8h, 30–40% cheaper) are in Responses public beta, and new models won't support Flex. **(d)** The parameter is unnamed in the changelog. Revisit for pricing once it is documented.
+- **Deprecation (11-18):** GPT-5.2/5.4/5.4 mini with EU data residency and `service_tier: fast|priority` shut down 2027-01-11. **(a)**
+- `/v1/prompts`, the Evals API and Agent Builder shut down 2026-11-30. **(d)** The gateway doesn't proxy them.
+- gpt-live-1.1 and standby mode for `v1/live/sessions` (11-19); CSAM image classifier on moderations (11-16). **(d)** Live sessions are relevant to issue #38 (Realtime relay) if it is picked up.
+- [Changelog](https://developers.openai.com/api/docs/changelog), [Deprecations](https://developers.openai.com/api/docs/deprecations)
+- Codex CLI / Agents SDK: not reviewed this run.
+
+### Competitors
+
+- **LiteLLM, Bifrost, Portkey:** no releases visible in the window, but the pages served stale snapshots (see Access). Nothing adopted. Carry over: LiteLLM's 11-14 response-ID ownership checks and Bifrost's Anthropic workload identity (logged 11-16).
+
+### Security
+
+- No new Go release since go1.27.4/go1.26.11 (11-10). #54 still covers it.
+- **pgx v5.13.0** (11-11) fixes **GHSA-w9rp-vfrh-q8vv** (Low, ≤5.12.0): a client panic in `Rows.Values` on a short DataRow from a hostile server. This is now confirmed from the advisory and changelog. **Merge Dependabot #63.** [Advisory](https://github.com/jackc/pgx/security/advisories/GHSA-w9rp-vfrh-q8vv)
+- **vite GHSA-p4f5-76q4-ffq7** is confirmed from the advisory: critical, dev server only. Patched in 8.3.7 / 8.2.5 / 8.1.7 / 7.3.8 / 6.4.6. `main` (5.4) has no 5.x fix. #57 (8.3.5) is still affected. [Advisory](https://github.com/vitejs/vite/security/advisories/GHSA-p4f5-76q4-ffq7)
+- No new advisories in the window for Go, pgx, x/text or vite. pkg.go.dev/vuln was only partly read.
+
+### Issue triage (requested by Anirudh this run)
+
+- Closed #37 (auto-routing) as done by #48. Its only other comment is spam.
+- Updated #29 with the real scope.
+- Opened PRs:
+  - #67 (#29 requested model name)
+  - #68 (#30 console placeholder)
+  - #69 (#24 verify captured streams)
+  - #70 (#25/#26 unit tests)
+  - #71 (#27/#28 housekeeping)
+- #36 (secret managers) and #38 (Realtime) remain open as larger features.
+
+### Backlog
+
+These upstream-watch PRs are still open:
+- #53 fast-mode billing (needs the Vertex fallback)
+- #54 Go 1.27.4
+- #55 judge temperature retry
+- #56 Claude on Google Cloud (draft)
+- #58 and #65 logs
+- #64 OpenAI cache writes
+- #66 message-threads cache (new)
+
+This entry is stacked on #65.
