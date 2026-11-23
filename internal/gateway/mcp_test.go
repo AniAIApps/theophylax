@@ -73,3 +73,23 @@ func TestApplyMCPStripsWhereUnsupported(t *testing.T) {
 		t.Fatalf("request without MCP changed: %v %v", out, h)
 	}
 }
+
+func TestStatefulRequestSkipsCache(t *testing.T) {
+	thread := http.Header{}
+	thread.Add("anthropic-beta", "context-1m-2025-08-07, message-threads-2026-08-12")
+	for name, tc := range map[string]struct {
+		body map[string]any
+		hdr  http.Header
+		want bool
+	}{
+		"plain":            {map[string]any{"model": "m"}, http.Header{}, false},
+		"other beta":       {map[string]any{"model": "m"}, http.Header{"Anthropic-Beta": {"mcp-client-2025-11-20"}}, false},
+		"thread create":    {map[string]any{"model": "m", "thread": map[string]any{"type": "create"}}, http.Header{}, true},
+		"thread continue":  {map[string]any{"model": "m", "thread": map[string]any{"type": "continue", "previous_message_id": "msg_1"}}, http.Header{}, true},
+		"thread beta only": {map[string]any{"model": "m"}, thread, true},
+	} {
+		if got := statefulRequest(tc.body, tc.hdr); got != tc.want {
+			t.Errorf("%s: %v, want %v", name, got, tc.want)
+		}
+	}
+}
