@@ -7,10 +7,19 @@ updates:
     directory: /ui
     schedule: { interval: weekly }
     groups:
-      console: { patterns: ["*"] }
+      # Minor and patch bumps arrive together and should stay green. Majors are
+      # left out of the group, so each one opens its own PR and can be migrated
+      # deliberately (issue #28).
+      console:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }

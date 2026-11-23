@@ -9,7 +9,7 @@ Provider=<kind>;Key=Value;Key=Value
 
 Any value can reference a secret instead of embedding it: `${env:NAME}` or `${file:/mnt/secrets/name}`. The full string is encrypted at rest (AES-256-GCM, key derived from `THEOPHYLAX_MASTER_KEY`); the console only ever shows a redacted form.
 
-Common options for every kind: `proxy=http://proxy:8080` (or `none`), `ca_bundle=/path/ca.pem` (TLS-inspecting egress), and in the provider's JSON options `drop_params`, `headers`, `timeout_seconds`.
+Common options for every kind: `proxy=http://proxy:8080` (or `none`), `ca_bundle=/path/ca.pem` (the root certificate of a TLS-inspecting corporate proxy, from any vendor), and in the provider's JSON options `drop_params`, `headers`, `timeout_seconds`.
 
 ## Anthropic
 
