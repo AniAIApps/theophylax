@@ -39,7 +39,7 @@ jobs:
       - name: Fuzz smoke (20s per target)
         run: |
           set -e
-          for t in "migrate FuzzParseYAML" "migrate FuzzDecryptLiteLLM" "guardrails FuzzAnalyzeInjection" "providers FuzzParseConn" "providers FuzzSSEReader" "providers FuzzResponsesTranslation"; do
+          for t in "migrate FuzzParseYAML" "migrate FuzzDecryptLiteLLM" "guardrails FuzzAnalyzeInjection" "providers FuzzParseConn" "providers FuzzSSEReader" "providers FuzzResponsesTranslation" "gateway FuzzWithModel"; do
             set -- $t
             go test -run '^$' -fuzz "^$2\$" -fuzztime 20s ./internal/$1/
           done
