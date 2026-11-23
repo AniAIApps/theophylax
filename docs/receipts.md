@@ -28,7 +28,7 @@ A receipt proves what the **gateway recorded**, not that a provider served the r
 ## Delivery
 
 - Header `X-Theophylax-Receipt: <request id>` on every response.
-- Streaming responses end with an SSE comment `: theophylax-receipt <jws>` (ignored by SSE clients). The response digest covers everything sent before that line, so remove it before hashing a captured stream.
+- Streaming responses end with an SSE comment `: theophylax-receipt <jws>` (ignored by SSE clients). The response digest covers every byte sent before that line, not the line itself. `theophylax verify-receipt` strips it for you, so a stream can be passed exactly as captured; other verifiers must remove it before hashing.
 - `GET /v1/receipts/{request_id}` with the same credential returns the JWS, its verification status, and whether the gateway has included it in a checkpoint. That anchoring status is computed by the gateway; receipts do not yet carry an inclusion proof you can check independently.
 
 ## Anchoring
@@ -40,6 +40,12 @@ Every `THEOPHYLAX_RECEIPT_CHECKPOINT_INTERVAL` (default 2 m) one replica takes t
 ```bash
 theophylax verify-receipt --keys https://ai-gateway.example.com/.well-known/theophylax-receipt-keys.json \
   --request request.json --response response.json @receipt.jws
+```
+
+For a streamed response, pass the stream exactly as captured (for example with `curl -N … > stream.raw`). The receipt argument can then be left out, because the CLI reads it from the stream's final comment:
+
+```bash
+theophylax verify-receipt --keys keys.json --request request.json --response stream.raw
 ```
 
 Or without the CLI: `POST /v1/receipts/verify {"jws": "…", "request": "<raw body>", "response": "<raw body>"}`.
