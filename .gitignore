@@ -5,7 +5,6 @@ web/dist/*
 !web/dist/.gitkeep
 *.env
 .DS_Store
-!web/dist/index.html
 
 # benchmark outputs
 bench/results/
@@ -13,3 +12,6 @@ bench/loadgen-bin
 
 # GitHub Pages build output (site/README.md)
 /_site/
+
+# TypeScript incremental build state (written by tsc -b)
+ui/*.tsbuildinfo
