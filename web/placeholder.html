@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Theophylax — console not built</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; }
+      code { font: 0.95em ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <h1>The console wasn't built into this binary</h1>
+    <p>The gateway API is running, but this binary was built without the web console.</p>
+    <p>Build it with <code>make ui build</code> (needs Node 22), or use the container image, which includes the console.</p>
+  </body>
+</html>

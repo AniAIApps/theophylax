@@ -12,6 +12,13 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
+// placeholder is served instead of the console when the binary was built
+// without it (plain `go build` with no `make ui`): web/dist then holds only
+// .gitkeep, which ui/public also ships so a console build leaves git clean.
+//
+//go:embed placeholder.html
+var placeholder []byte
+
 // Handler serves static assets and falls back to index.html for client-side routes.
 func Handler() http.Handler {
 	sub, _ := fs.Sub(dist, "dist")
@@ -36,8 +43,7 @@ func Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		b, err := fs.ReadFile(sub, "index.html")
 		if err != nil {
-			http.Error(w, "console not built (run: make ui)", 503)
-			return
+			b = placeholder
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(b)
